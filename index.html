@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<!--
+  CAFÉ RADAR — real-time cafe finder built on the Geoapify Places API
+  (data sourced from OpenStreetMap) and Leaflet/OpenStreetMap for the map.
+
+  Why this stack: no Google Cloud account, no billing setup, no complex
+  console. Just a free Geoapify API key (signup = email only).
+
+  This is a static, single-file app meant to be deployed as-is (e.g.
+  GitHub Pages) and used by anyone who visits it — not just you.
+
+  Two ways to supply the Geoapify API key:
+   A) Hardcode your own key into OWNER_API_KEY below. Every visitor uses it.
+      Geoapify lets you restrict a key to specific domains in your
+      dashboard (see README) — do that before this goes public.
+   B) Leave OWNER_API_KEY as-is. Each visitor is prompted to paste in their
+      own key on first load; it's saved only in *their* browser's
+      localStorage and never sent anywhere but Geoapify.
+
+  Every visitor's favorites are also personal to them — stored in their own
+  browser's localStorage, so nobody sees anybody else's list. See README.md
+  for full setup + GitHub Pages deployment steps.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Café Radar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{
+    --bg: #f7f4ed;
+    --bg-elev: #ffffff;
+    --bg-elev-2: #efe9dc;
+    --ink: #2b2118;
+    --ink-dim: #6b5f50;
+    --ink-faint: #9a8d7a;
+    --accent: #a9702f;
+    --accent-soft: #c98a3b;
+    --btn-text: #fffaf2;
+    --favorite: #c98a3b;
+    --line: #e4ddcd;
+    --danger: #b23b2e;
+    --radius: 10px;
+    --shadow: 0 8px 24px rgba(43,33,24,0.12);
+  }
+
+  *{ box-sizing: border-box; }
+
+  html,body{
+    margin:0; padding:0; height:100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Work Sans', sans-serif;
+  }
+
+  h1,h2,h3{ font-family:'Fraunces', serif; font-weight:600; margin:0; }
+
+  #app{
+    display:flex;
+    flex-direction:column;
+    height:100vh;
+  }
+
+  header{
+    display:flex;
+    align-items:center;
+    gap:18px;
+    padding:16px 22px;
+    background: var(--bg-elev);
+    border-bottom:1px solid var(--line);
+    flex-wrap:wrap;
+  }
+
+  .brand{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    margin-right:auto;
+  }
+
+  .brand h1{ font-size:22px; letter-spacing:0.2px; }
+  .brand span{ color:var(--ink-faint); font-size:13px; }
+
+  .controls{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
+  }
+
+  select, button.pill{
+    font-family:'Work Sans', sans-serif;
+    font-size:13.5px;
+    color:var(--ink);
+    background:var(--bg-elev-2);
+    border:1px solid var(--line);
+    border-radius:100px;
+    padding:8px 14px;
+    cursor:pointer;
+  }
+
+  select:focus, button:focus-visible{
+    outline:2px solid var(--accent);
+    outline-offset:1px;
+  }
+
+  button.pill.active{
+    background: var(--accent);
+    color:var(--btn-text);
+    border-color: var(--accent);
+    font-weight:600;
+  }
+
+  button.primary{
+    font-family:'Work Sans', sans-serif;
+    font-weight:600;
+    font-size:13.5px;
+    background: var(--accent);
+    color:var(--btn-text);
+    border:none;
+    border-radius:100px;
+    padding:9px 18px;
+    cursor:pointer;
+  }
+  button.primary:hover{ background: var(--accent-soft); }
+  button.primary:disabled{ opacity:0.5; cursor:default; }
+
+  main{
+    display:flex;
+    flex:1;
+    min-height:0;
+  }
+
+  #sidebar{
+    width:380px;
+    min-width:300px;
+    max-width:420px;
+    border-right:1px solid var(--line);
+    background: var(--bg);
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+
+  #status{
+    padding:14px 20px;
+    font-size:13px;
+    color: var(--ink-faint);
+    border-bottom:1px solid var(--line);
+    min-height:18px;
+  }
+  #status.error{ color: var(--danger); }
+
+  #list{
+    overflow-y:auto;
+    flex:1;
+    padding:6px 0;
+  }
+
+  .cafe-card{
+    display:flex;
+    gap:12px;
+    padding:14px 20px;
+    border-bottom:1px solid var(--line);
+    cursor:pointer;
+    align-items:flex-start;
+  }
+  .cafe-card:hover{ background: var(--bg-elev); }
+  .cafe-card.selected{ background: var(--bg-elev-2); }
+
+  .cafe-main{ flex:1; min-width:0; }
+
+  .cafe-name{
+    font-family:'Fraunces', serif;
+    font-size:16px;
+    font-weight:600;
+    color:var(--ink);
+    margin-bottom:3px;
+  }
+
+  .cafe-meta{
+    font-size:12.5px;
+    color:var(--ink-dim);
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
+
+  .badge{
+    font-size:11px;
+    padding:2px 8px;
+    border-radius:100px;
+    border:1px solid var(--line);
+    color: var(--accent-soft);
+  }
+
+  .cafe-address{
+    font-size:12px;
+    color:var(--ink-faint);
+    margin-top:4px;
+  }
+  .cafe-hours{
+    font-size:11.5px;
+    color:var(--ink-faint);
+    margin-top:3px;
+    font-family: monospace;
+  }
+
+  .fav-btn{
+    background:none;
+    border:none;
+    font-size:20px;
+    line-height:1;
+    cursor:pointer;
+    color: var(--ink-faint);
+    padding:2px;
+  }
+  .fav-btn.is-fav{ color: var(--favorite); }
+
+  #map{ flex:1; background: var(--bg); }
+
+  .leaflet-container{ background: var(--bg) !important; }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip{
+    background: var(--bg-elev); color: var(--ink);
+  }
+  .leaflet-popup-content a{ color: var(--accent-soft); }
+  .leaflet-control-attribution{
+    background: rgba(255,255,255,0.85) !important;
+    color: var(--ink-faint) !important;
+  }
+  .leaflet-control-attribution a{ color: var(--ink-dim) !important; }
+
+  .empty{
+    padding:40px 24px;
+    text-align:center;
+    color:var(--ink-faint);
+    font-size:13.5px;
+    line-height:1.6;
+  }
+
+  @media (max-width: 760px){
+    main{ flex-direction:column; }
+    #sidebar{ width:100%; max-width:none; height:46%; border-right:none; border-bottom:1px solid var(--line); }
+    #map{ height:54%; }
+  }
+
+  .key-link{
+    background:none;
+    border:none;
+    color:var(--ink-faint);
+    font-size:12px;
+    text-decoration:underline;
+    cursor:pointer;
+    padding:0;
+  }
+
+  #keyOverlay{
+    position:fixed;
+    inset:0;
+    background:rgba(27,21,17,0.92);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:9999;
+    padding:20px;
+  }
+  #keyOverlay[hidden]{ display:none; }
+
+  .key-card{
+    background: var(--bg-elev);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    box-shadow: var(--shadow);
+    padding:28px 26px;
+    max-width:420px;
+    width:100%;
+  }
+  .key-card h2{ font-size:19px; margin-bottom:10px; }
+  .key-card p{ font-size:13.5px; color:var(--ink-dim); line-height:1.55; margin:0 0 14px; }
+  .key-card a{ color: var(--accent-soft); }
+
+  .key-card input{
+    width:100%;
+    font-family:'Work Sans', sans-serif;
+    font-size:13.5px;
+    color:var(--ink);
+    background:var(--bg-elev-2);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:10px 12px;
+    margin-bottom:12px;
+  }
+  .key-card input:focus{ outline:2px solid var(--accent); }
+
+  .key-card .row{ display:flex; gap:10px; align-items:center; }
+  .key-error{ color: var(--danger); font-size:12.5px; margin:-6px 0 10px; min-height:16px; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <div class="brand">
+      <h1>Café Radar</h1>
+      <span>cafes near you, from OpenStreetMap</span>
+    </div>
+    <div class="controls">
+      <select id="radiusSelect" aria-label="Search radius">
+        <option value="800">500 m</option>
+        <option value="1500" selected>1.5 km</option>
+        <option value="3000">3 km</option>
+        <option value="6000">6 km</option>
+      </select>
+      <button class="pill" id="favToggle" aria-pressed="false">★ Favorites</button>
+      <button class="primary" id="refreshBtn">Refresh nearby</button>
+      <button class="key-link" id="changeKeyLink" hidden>API key</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="sidebar">
+      <div id="status">Locating you…</div>
+      <div id="list"></div>
+    </div>
+    <div id="map"></div>
+  </main>
+</div>
+
+<div id="keyOverlay" hidden>
+  <div class="key-card">
+    <h2>One-time setup</h2>
+    <p>
+      Café Radar needs a free Geoapify API key to pull real cafe data.
+      Sign up at
+      <a href="https://myprojects.geoapify.com/register" target="_blank" rel="noopener">geoapify.com</a>
+      (email only, no credit card) and copy the key from your dashboard.
+      It's saved only in this browser — never sent anywhere but Geoapify.
+    </p>
+    <input type="text" id="keyInput" placeholder="Paste your Geoapify API key here" autocomplete="off">
+    <div class="key-error" id="keyError"></div>
+    <div class="row">
+      <button class="primary" id="keySaveBtn">Save &amp; load cafes</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+  // ---- CONFIGURE ME (optional) ---------------------------------------
+  // Paste your own Geoapify key here to serve it to every visitor. Leave
+  // as-is to have each visitor supply their own (see README for why/how).
+  const OWNER_API_KEY = "29019146c87d44fca87ab4681ce6264a";
+  // ----------------------------------------------------------------------
+
+  const FALLBACK_CENTER = { lat: -1.2921, lng: 36.8219 }; // Nairobi, used only if geolocation is denied
+  const FAVORITES_KEY = "cafeRadarFavorites";
+  const USER_KEY_STORAGE = "cafeRadarUserApiKey";
+
+  let map, userMarker, currentMarkers = [];
+  let allCafes = [];               // last fetched results, enriched
+  let selectedId = null;
+  let filters = { favoritesOnly: false };
+  let apiKey = null;
+
+  function loadFavorites(){
+    try { return JSON.parse(localStorage.getItem(FAVORITES_KEY)) || {}; }
+    catch(e){ return {}; }
+  }
+  function saveFavorites(favs){
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
+  }
+  let favorites = loadFavorites(); // { placeId: {name, savedAt} }
+
+  function setStatus(text, isError){
+    const el = document.getElementById('status');
+    el.textContent = text;
+    el.classList.toggle('error', !!isError);
+  }
+
+  // ---- API key resolution: owner key, else visitor-supplied key ----
+  function getStoredUserKey(){
+    return localStorage.getItem(USER_KEY_STORAGE) || null;
+  }
+
+  function resolveApiKey(){
+    if (OWNER_API_KEY && OWNER_API_KEY !== "YOUR_API_KEY_HERE") return OWNER_API_KEY;
+    return getStoredUserKey();
+  }
+
+  function showKeyOverlay(prefillError){
+    document.getElementById('keyOverlay').hidden = false;
+    document.getElementById('keyError').textContent = prefillError || "";
+    document.getElementById('keyInput').focus();
+  }
+  function hideKeyOverlay(){
+    document.getElementById('keyOverlay').hidden = true;
+  }
+
+  document.getElementById('keySaveBtn').addEventListener('click', () => {
+    const val = document.getElementById('keyInput').value.trim();
+    if (!val){
+      document.getElementById('keyError').textContent = "Paste a key first.";
+      return;
+    }
+    localStorage.setItem(USER_KEY_STORAGE, val);
+    hideKeyOverlay();
+    boot();
+  });
+  document.getElementById('keyInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('keySaveBtn').click();
+  });
+
+  document.getElementById('changeKeyLink').addEventListener('click', () => {
+    showKeyOverlay();
+  });
+
+  // ---- Bootstrap ----
+  function boot(){
+    apiKey = resolveApiKey();
+    const changeLink = document.getElementById('changeKeyLink');
+
+    if (!apiKey){
+      changeLink.hidden = true;
+      showKeyOverlay();
+      return;
+    }
+    changeLink.hidden = !getStoredUserKey();
+
+    if (!map) initMap();
+    locateAndSearch();
+  }
+
+  function initMap(){
+    map = L.map('map', { zoomControl: true }).setView([FALLBACK_CENTER.lat, FALLBACK_CENTER.lng], 14);
+    L.tileLayer(`https://maps.geoapify.com/v1/tile/dark-matter/{z}/{x}/{y}.png?apiKey=${encodeURIComponent(apiKey)}`, {
+      maxZoom: 20,
+      attribution: 'Powered by <a href="https://www.geoapify.com/" target="_blank">Geoapify</a> | &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors'
+    }).addTo(map);
+  }
+
+  function locateAndSearch(){
+    setStatus("Locating you…");
+    if (!navigator.geolocation){
+      map.setView([FALLBACK_CENTER.lat, FALLBACK_CENTER.lng], 14);
+      searchNearbyCafes(FALLBACK_CENTER);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const center = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        map.setView([center.lat, center.lng], 15);
+        placeUserMarker(center);
+        searchNearbyCafes(center);
+      },
+      () => {
+        setStatus("Location access denied — showing a default area. Edit FALLBACK_CENTER in the file to change it.", true);
+        map.setView([FALLBACK_CENTER.lat, FALLBACK_CENTER.lng], 14);
+        placeUserMarker(FALLBACK_CENTER);
+        searchNearbyCafes(FALLBACK_CENTER);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  }
+
+  const youIcon = L.divIcon({
+    className: '',
+    html: '<div style="width:14px;height:14px;border-radius:50%;background:#c89b3c;border:2px solid #1b1511;"></div>',
+    iconSize: [14,14],
+    iconAnchor: [7,7]
+  });
+
+  function placeUserMarker(center){
+    if (userMarker) map.removeLayer(userMarker);
+    userMarker = L.marker([center.lat, center.lng], { icon: youIcon, title: "You are here" }).addTo(map);
+  }
+
+  function haversineMeters(lat1, lon1, lat2, lon2){
+    const R = 6371000;
+    const toRad = d => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  // ---- Geoapify Places search ----
+  async function searchNearbyCafes(center){
+    setStatus("Finding cafes nearby…");
+    document.getElementById('refreshBtn').disabled = true;
+
+    const radius = Number(document.getElementById('radiusSelect').value);
+    const url = `https://api.geoapify.com/v2/places?categories=catering.cafe`
+      + `&filter=circle:${center.lng},${center.lat},${radius}`
+      + `&bias=proximity:${center.lng},${center.lat}`
+      + `&limit=20&apiKey=${encodeURIComponent(apiKey)}`;
+
+    try {
+      const res = await fetch(url);
+      document.getElementById('refreshBtn').disabled = false;
+
+      if (res.status === 401 || res.status === 403){
+        setStatus("That API key was rejected by Geoapify.", true);
+        if (getStoredUserKey()){
+          localStorage.removeItem(USER_KEY_STORAGE);
+          showKeyOverlay("That key didn't work — double-check it, then try again.");
+        }
+        return;
+      }
+      if (!res.ok){
+        let detail = "";
+        try {
+          const errBody = await res.json();
+          detail = errBody?.message || errBody?.error || JSON.stringify(errBody);
+        } catch(e){ /* ignore parse failure */ }
+        setStatus(`Geoapify error (${res.status}): ${detail || "no details returned"}`, true);
+        console.error("Geoapify error body:", detail);
+        return;
+      }
+
+      const data = await res.json();
+      const features = data.features || [];
+
+      if (!features.length){
+        allCafes = [];
+        setStatus("No cafes found in this radius — try a wider one.");
+        renderList();
+        clearMarkers();
+        return;
+      }
+
+      allCafes = features.map(f => {
+        const p = f.properties || {};
+        const [lng, lat] = f.geometry.coordinates;
+        return {
+          id: p.place_id || `${lat},${lng},${p.name}`,
+          name: p.name || p.address_line1 || "Unnamed cafe",
+          address: p.formatted || [p.address_line1, p.address_line2].filter(Boolean).join(", "),
+          hours: p.opening_hours || null,
+          lat, lng,
+          distance: haversineMeters(center.lat, center.lng, lat, lng)
+        };
+      }).sort((a,b) => a.distance - b.distance);
+
+      setStatus(`${allCafes.length} cafes within ${radius >= 1000 ? (radius/1000)+" km" : radius+" m"}.`);
+      renderList();
+      renderMarkers();
+    } catch (err){
+      document.getElementById('refreshBtn').disabled = false;
+      console.error(err);
+      setStatus("Search failed — check your internet connection and the browser console.", true);
+    }
+  }
+
+  // ---- Rendering ----
+  function clearMarkers(){
+    currentMarkers.forEach(m => map.removeLayer(m));
+    currentMarkers = [];
+  }
+
+  function cafeIcon(isFav){
+    return L.divIcon({
+      className: '',
+      html: `<div style="width:${isFav?16:12}px;height:${isFav?16:12}px;border-radius:50%;background:${isFav?'#d9a441':'#8a7d6d'};border:1.5px solid #1b1511;"></div>`,
+      iconSize: [isFav?16:12, isFav?16:12],
+      iconAnchor: [isFav?8:6, isFav?8:6]
+    });
+  }
+
+  function renderMarkers(){
+    clearMarkers();
+    getFilteredCafes().forEach(cafe => {
+      const marker = L.marker([cafe.lat, cafe.lng], { icon: cafeIcon(!!favorites[cafe.id]) }).addTo(map);
+      marker.on('click', () => selectCafe(cafe.id, true));
+      currentMarkers.push(marker);
+    });
+  }
+
+  function getFilteredCafes(){
+    return allCafes.filter(c => !filters.favoritesOnly || favorites[c.id]);
+  }
+
+  function renderList(){
+    const list = document.getElementById('list');
+    const cafes = getFilteredCafes();
+    list.innerHTML = "";
+
+    if (!cafes.length){
+      const msg = allCafes.length
+        ? "Nothing matches your current filters."
+        : "No cafes loaded yet.";
+      list.innerHTML = `<div class="empty">${msg}</div>`;
+      return;
+    }
+
+    cafes.forEach(cafe => {
+      const card = document.createElement('div');
+      card.className = 'cafe-card' + (cafe.id === selectedId ? ' selected' : '');
+      card.dataset.id = cafe.id;
+
+      const isFav = !!favorites[cafe.id];
+      const distKm = (cafe.distance/1000).toFixed(1);
+
+      card.innerHTML = `
+        <div class="cafe-main">
+          <div class="cafe-name">${escapeHtml(cafe.name)}</div>
+          <div class="cafe-meta">
+            <span class="badge">${distKm} km away</span>
+          </div>
+          ${cafe.address ? `<div class="cafe-address">${escapeHtml(cafe.address)}</div>` : ""}
+          ${cafe.hours ? `<div class="cafe-hours">${escapeHtml(cafe.hours)}</div>` : ""}
+        </div>
+        <button class="fav-btn ${isFav ? 'is-fav' : ''}" aria-label="Toggle favorite" data-fav="${cafe.id}">
+          ${isFav ? '★' : '☆'}
+        </button>
+      `;
+
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('.fav-btn')) return;
+        selectCafe(cafe.id, true);
+      });
+
+      card.querySelector('.fav-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleFavorite(cafe);
+      });
+
+      list.appendChild(card);
+    });
+  }
+
+  function selectCafe(id, panMap){
+    selectedId = id;
+    renderList();
+    const cafe = allCafes.find(c => c.id === id);
+    if (cafe && panMap && map){
+      map.panTo([cafe.lat, cafe.lng]);
+      if (map.getZoom() < 16) map.setZoom(16);
+      openPopup(cafe);
+    }
+  }
+
+  function openPopup(cafe){
+    const distKm = (cafe.distance/1000).toFixed(1);
+    L.popup()
+      .setLatLng([cafe.lat, cafe.lng])
+      .setContent(`
+        <div style="font-family:'Work Sans',sans-serif; max-width:220px;">
+          <div style="font-family:'Fraunces',serif; font-weight:600; font-size:15px; margin-bottom:4px;">${escapeHtml(cafe.name)}</div>
+          <div style="font-size:12.5px; margin-bottom:4px;">${distKm} km away</div>
+          ${cafe.address ? `<div style="font-size:12px; opacity:0.8; margin-bottom:6px;">${escapeHtml(cafe.address)}</div>` : ""}
+          ${cafe.hours ? `<div style="font-size:11.5px; font-family:monospace; opacity:0.85;">${escapeHtml(cafe.hours)}</div>` : ""}
+        </div>
+      `)
+      .openOn(map);
+  }
+
+  function toggleFavorite(cafe){
+    if (favorites[cafe.id]){
+      delete favorites[cafe.id];
+    } else {
+      favorites[cafe.id] = { name: cafe.name, savedAt: Date.now() };
+    }
+    saveFavorites(favorites);
+    renderList();
+    renderMarkers();
+  }
+
+  function escapeHtml(str){
+    const div = document.createElement('div');
+    div.textContent = str ?? "";
+    return div.innerHTML;
+  }
+
+  // ---- Controls ----
+  document.getElementById('refreshBtn').addEventListener('click', locateAndSearch);
+
+  document.getElementById('radiusSelect').addEventListener('change', () => {
+    if (map) searchNearbyCafes({ lat: map.getCenter().lat, lng: map.getCenter().lng });
+  });
+
+  document.getElementById('favToggle').addEventListener('click', (e) => {
+    filters.favoritesOnly = !filters.favoritesOnly;
+    e.target.classList.toggle('active', filters.favoritesOnly);
+    e.target.setAttribute('aria-pressed', String(filters.favoritesOnly));
+    renderList();
+    renderMarkers();
+  });
+
+  boot();
+</script>
+
+</body>
+</html>
