@@ -33,7 +33,7 @@ Forking this or reusing the code? Swap in your own free key:
 ## How favorites & keys stay private
 
 Everything is stored in `localStorage`, which is scoped per browser per
-site — visitors never see each other's favorites or API keys, and nothing
+site so visitors never see each other's favorites or API keys, and nothing
 is sent anywhere except directly to Geoapify.
 
 ## Tech
