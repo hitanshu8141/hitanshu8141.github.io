@@ -1,25 +1,23 @@
 # Café Radar
 
-A real-time cafe finder — locates you, pulls nearby cafes (name, address,
+A real-time cafe finder which locates you, pulls nearby cafes (name, address,
 hours where listed, distance) from the Geoapify Places API, and lets
 anyone who visits star their own favorites. No backend, no build step,
 just one HTML file.
 
-- **Live data** — real cafe names, addresses and hours from Geoapify on
+- **Live data** - real cafe names, addresses and hours from Geoapify on
   every search.
-- Map tiles from Geoapify too (same key as the places search), styled
-  dark to match the app.
-- **Per-visitor favorites** — stored in each person's own browser
+- Map tiles from Geoapify too (same key as the places search)
+- **Per-visitor favorites** - stored in each person's own browser
   (`localStorage`), so favorites are private to them.
 - Radius filter, click-to-preview on the map.
-- No server, no database, no build tooling — deploys as a static file.
+- No server, no database, no build tooling - deploys as a static file.
 
 ## Running it locally
 
-No build step — just open `index.html` in a browser (a "Live Server"-type
+No build step - just open `index.html` in a browser (a "Live Server"-type
 tool in your editor works well, since it serves over `http://localhost`,
 which geolocation prefers).
-
 
 ## Using your own key instead
 
