@@ -25,8 +25,6 @@ Forking this or reusing the code? Swap in your own free key:
 
 1. Sign up at [myprojects.geoapify.com/register](https://myprojects.geoapify.com/register)
    (email only, no credit card) and copy the key from your dashboard.
-   The free tier (3,000 requests/day at time of writing) covers personal
-   use comfortably.
 2. Either paste it into `OWNER_API_KEY` near the top of the `<script>`
    block in `index.html` (same as this repo does), or clear that constant
    back to `"YOUR_API_KEY_HERE"` — then each visitor is prompted to enter
