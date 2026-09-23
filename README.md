@@ -43,7 +43,3 @@ Vanilla HTML/CSS/JS, [Leaflet](https://leafletjs.com/) for the map, and the
 [Map Tiles API](https://apidocs.geoapify.com/docs/maps/map-tiles/) for cafe
 data and the map background (both on one Geoapify key). No frameworks, no
 dependencies to install.
-
-## License
-
-MIT — see `LICENSE`.
